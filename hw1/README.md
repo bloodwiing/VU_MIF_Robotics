@@ -20,7 +20,9 @@ Support 4 different operation modes:
 - **NIGHT**:
   A variant of the **FULL** mode that's not as glaring
 
-Additionally this mode is displayed via the LCD display as well as the current set brightness of the LED as a percentage.
+These modes are toggled via a pushbutton.
+
+Additionally the active mode is displayed via the LCD display as well as the current set brightness of the LED as a percentage.
 
 ### Parts List
 | Component | Qty |
@@ -36,3 +38,20 @@ Additionally this mode is displayed via the LCD display as well as the current s
 | Jumper cables | (optional unless soldering) |
 
 ### Photo
+
+<img width="761" height="459" alt="2025-09-23-114756_hyprshot" src="https://github.com/user-attachments/assets/7d256627-4611-45e9-94ad-7fbc914eab67" />
+
+### Video Demo
+
+https://github.com/user-attachments/assets/4fc78b31-2f4e-4211-9897-624afdff7422
+
+### Review
+
+**Features**:
+* Working sensor->light reactivity.
+* Several mode support.
+* The button has support for debouncing for any electrical noise.
+* LCD display to inform the user of the state.
+
+**Possible improvements**:
+* **FULL** and **REACTIVE** mode should not be one of the cycle toggles, when the user is trying to navigate their home under the guide of a **NIGHT** light mode.
