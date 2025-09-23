@@ -55,3 +55,5 @@ https://github.com/user-attachments/assets/4fc78b31-2f4e-4211-9897-624afdff7422
 
 **Possible improvements**:
 * **FULL** and **REACTIVE** mode should not be one of the cycle toggles, when the user is trying to navigate their home under the guide of a **NIGHT** light mode.
+* LCD display brightness could be regulated with a potentiometer.
+* Photoresistor sensitivity could be regulated with a potentiometer.
