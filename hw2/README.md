@@ -37,7 +37,7 @@ Both buttons show the counter out of Idle mode.
 | Arduino Uno R3 | 1 |
 | 7 Segment display | 1 |
 | Pushbutton | 2 |
-| 1 kOhm Resistor | 3 |
+| 1 kOhm Resistor | 11 |
 
 ### Photo
 

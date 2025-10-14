@@ -87,8 +87,8 @@ struct UserData
 #define TIME_MODES_MAX 9
 const uint32_t timeModes[] = {20, 50, 100, 250, 500, 750, 1000, 5000, 60000};
 
-#define BRIGTHNESS_MODES_MAX 5
-const byte brightnessModes[] = {1, 10, 20, 45, 80, 140};
+#define BRIGTHNESS_MODES_MAX 7
+const byte brightnessModes[] = {1, 10, 20, 45, 80, 140, 255};
 // const byte brightnessModes[] = {240, 175, 100, 60, 0};
 
 volatile bool button1Event = false;
