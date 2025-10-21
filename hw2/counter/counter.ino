@@ -133,13 +133,13 @@ void setupTimer()
   // just reset to normal values
   TCCR1A = 0;
   TCCR1B = 0;
-  // clear timer on compare
+  // clear timer on compare (CTC)
   TCCR1B |= (1 << WGM12);
   // prescale so instead of 16Mhz we run timer at 250Khz ticks (every 0.004ms or 4us)
   TCCR1B |= (1 << CS11) | (1 << CS10);
-  // comparison target A
+  // comparison target
   // 0.004ms x [250 ticks] = 1ms
-  // subtract -1 cause timer starts at 0
+  // subtract -1 cause timer starts at 0 (must be lower than 65536)
   OCR1A = 250 - 1;
   // enable compare A interrupt so we can utilise the timer event
   TIMSK1 |= (1 << OCIE1A);
