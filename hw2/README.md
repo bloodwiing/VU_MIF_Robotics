@@ -41,11 +41,11 @@ Both buttons show the counter out of Idle mode.
 
 ### Photo
 
-<img width="1164" height="450" alt="2025-10-14-135910_hyprshot" src="https://github.com/user-attachments/assets/691dd7da-7c28-4f50-a93e-6d010666745d" />
+<img width="1179" height="472" alt="photo" src="https://github.com/user-attachments/assets/926e82e9-481c-45d2-99d5-b52722aa4ab6" />
 
 ### Video Demo
 
-https://github.com/user-attachments/assets/cdfb30e9-ecf3-4c1e-87d4-a34cc3c0045d
+https://github.com/user-attachments/assets/3f903a54-cdeb-4f3a-88e8-33b63275f5f6
 
 ### Review
 
@@ -57,4 +57,5 @@ https://github.com/user-attachments/assets/cdfb30e9-ecf3-4c1e-87d4-a34cc3c0045d
 
 **Possible improvements**:
 * Navigation or value adjustment could be done with a more natural directional input than a one-way pushbutton
+
 
