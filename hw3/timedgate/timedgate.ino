@@ -1,18 +1,19 @@
 /*
   VU MIF
   Informatics
-  Robotics homework 2
+  Robotics homework 3
   @author: Donatas Kirda (sid: 2212166)
 */
 
 #include <Arduino.h>
 #include <EEPROM.h>
+#include <ServoTimer2.h>
 
 uint8_t CRC8(const uint8_t *data, int length);
 
 #define USER_DATA_EEPORM_ADDRESS 0
-#define USER_DATA_MAGIC 37
-#define USER_DATA_VERSION 1
+#define USER_DATA_MAGIC 83
+#define USER_DATA_VERSION 2
 
 const int DATA_PIN   = 4;
 const int LATCH_PIN  = 5;
@@ -20,8 +21,11 @@ const int CLOCK_PIN  = 6;
 const int BUTTON_2   = 3;
 const int BUTTON_1   = 2;
 const int BRIGHTNESS_PIN = 11;
+const int SERVO_PIN  = 10;
+const int SENSOR_PIN = A0;
 
 const int DEBOUNCE_TIME_MS = 10;
+const int SENSOR_REACT_THRESHOLD = 400;
 
 #define SEGMENT_CLEAR B00000000
 #define SYMBOL_1      B01100000
@@ -39,6 +43,11 @@ const int DEBOUNCE_TIME_MS = 10;
 #define SYMBOL_T      B00011110
 #define SYMBOL_N      B00101010
 #define SYMBOL_B      B00111110
+#define SYMBOL_S      B10110110
+#define SYMBOL_Y      B01110110
+#define SYMBOL_A      B11101110
+#define SYMBOL_D      B01111010
+#define SYMBOL_DASH   B00000010
 
 const byte digits[] = {
   SYMBOL_0,
@@ -53,12 +62,31 @@ const byte digits[] = {
   SYMBOL_9
 };
 
+const short throbber_frame_count = 6;
+const short throbber_frame_time = 50;
+const byte throbber_frames[] = {
+  B00000100,
+  B00001000,
+  B00010000,
+  B00100000,
+  B01000000,
+  B10000000
+};
+
 enum class State
 {
   Idle,
   Settings,
-  Time,
+  Displaying,
   ChangingValue
+};
+
+enum class OperationState
+{
+  Closed,
+  Opening,
+  Open,
+  Closing
 };
 
 enum class Settings
@@ -67,7 +95,9 @@ enum class Settings
   Reset,
   Time,
   Nothing,
-  Brightness
+  Speed,
+  Automation,
+  Debug
 };
 
 struct UserData
@@ -75,16 +105,16 @@ struct UserData
   byte magic;
   byte version;
   short timeMode;
-  short brightnessMode;
+  bool automaticMode;
+  bool speedMode;
   uint8_t crc;
 };
 
 #define TIME_MODES_MAX 9
 const uint32_t timeModes[] = {20, 50, 100, 250, 500, 750, 1000, 5000, 60000};
 
-#define BRIGTHNESS_MODES_MAX 7
-const byte brightnessModes[] = {1, 10, 20, 45, 80, 140, 255};
-// const byte brightnessModes[] = {240, 175, 100, 60, 0};
+#define SPEED_MODES_MAX 7
+const uint32_t speedModes[] = {1, 2, 5, 10, 45, 90, 180};
 
 volatile bool button1Event = false;
 volatile bool button2Event = false;
@@ -96,16 +126,27 @@ uint32_t lastButton2Press = 0;
 
 short timeMode = 4;
 uint32_t tickTimeMs = 500;
-short brightnessMode = 4;
-byte brightness = 80;
+short speedMode = 4;
+uint32_t speedIncrement = 10;
+bool automate = true;
 
 uint32_t lastTick = 0;
 bool dotTicked = false;
 short number = 0;
+bool can_count_down = false;
+
+short throbber_frame_number = 0;
+short throbber_frame_direction = 1;
+
+#define DOOR_POSITION_MAX 1023
+volatile int door_position = 0;
 
 State state = State::Idle;
+OperationState operationState = OperationState::Closed;
 Settings settingsState = Settings::Power;
 UserData data;
+
+ServoTimer2 doorServo;
 
 byte segmentDisplayLastState = 0;
 
@@ -173,10 +214,11 @@ ISR(TIMER1_COMPA_vect)
 void resetSettings()
 {
   timeMode = 4;
-  brightnessMode = 3;
+  speedMode = 3;
+  automate = true;
 
   tickTimeMs = timeModes[timeMode];
-  brightness = brightnessModes[brightnessMode];
+  speedIncrement = speedModes[speedMode];
 }
 
 void validateEEPROM()
@@ -203,10 +245,11 @@ void validateEEPROM()
   Serial.println("EEPROM validated");
 
   timeMode = data.timeMode;
-  brightnessMode = data.brightnessMode;
+  speedMode = data.speedMode;
+  automate = data.automaticMode;
 
   tickTimeMs = timeModes[timeMode];
-  brightness = brightnessModes[brightnessMode];
+  speedIncrement = speedModes[speedMode];
 }
 
 void updateEEPROM()
@@ -215,7 +258,8 @@ void updateEEPROM()
   data.magic = USER_DATA_MAGIC;
   data.version = USER_DATA_VERSION;
   data.timeMode = timeMode;
-  data.brightnessMode = brightnessMode;
+  data.speedMode = speedMode;
+  data.automaticMode = automate;
 
   uint8_t crc = CRC8((uint8_t*)&data, sizeof(data) - 1);
   data.crc = crc;
@@ -226,7 +270,9 @@ void updateEEPROM()
 
 void updateEEPROMIfChanged()
 {
-  if (data.timeMode == timeMode && data.brightnessMode == brightnessMode)
+  if (data.timeMode == timeMode
+      && data.speedMode == speedMode
+      && data.automaticMode == automate)
   {
     Serial.println("EEPROM matches, no need to update");
     return;
@@ -252,15 +298,77 @@ void setup()
 
   setupTimer();
 
+  doorServo.attach(SERVO_PIN);
+
   validateEEPROM();
 }
 
 void loop()
-{ 
+{
   if (timerEvent)
   {
     timerEvent = false;
     time++;
+
+    int sensor_val = analogRead(SENSOR_PIN);
+    if (automate && sensor_val >= SENSOR_REACT_THRESHOLD && operationState == OperationState::Closed)
+    {
+      operationState = OperationState::Opening;
+      throbber_frame_direction = -1;
+    }
+
+    if (operationState == OperationState::Opening)
+    {
+      door_position += speedIncrement;
+      if (door_position >= DOOR_POSITION_MAX)
+      {
+        door_position = DOOR_POSITION_MAX;
+        operationState = OperationState::Open;
+        lastTick = time;
+        number = 9;
+      }
+    }
+    else if (operationState == OperationState::Closing)
+    {
+      door_position -= speedIncrement;
+      if (door_position <= 0)
+      {
+        door_position = 0;
+        operationState = OperationState::Closed;
+      }
+    }
+
+    if (time % throbber_frame_time == 0)
+    {
+      if (throbber_frame_direction == 1)
+      {
+        if (++throbber_frame_number >= throbber_frame_count)
+        {
+          throbber_frame_number = 0;
+        }
+      }
+      else
+      {
+        if (--throbber_frame_number < 0)
+        {
+          throbber_frame_number = throbber_frame_count - 1;
+        }
+      }
+    }
+
+    if (automate)
+    {
+      can_count_down = analogRead(SENSOR_PIN) < SENSOR_REACT_THRESHOLD;
+    }
+    else
+    {
+      can_count_down = digitalRead(BUTTON_2) == LOW;
+    }
+
+    if (!can_count_down)
+    {
+      number = 9;
+    }
   }
 
   if (button1Event) 
@@ -273,14 +381,15 @@ void loop()
   if (time - lastButton1Press == DEBOUNCE_TIME_MS && digitalRead(BUTTON_1) == HIGH)
   {
     lastButton1Press = -1;
+    Serial.println("BUTTON 1 activated");
 
     switch (state)
     {
       case State::Idle:
-        state = State::Time;
+        state = State::Displaying;
         break;
 
-      case State::Time:
+      case State::Displaying:
         state = State::Settings;
         settingsState = Settings::Power;
         break;
@@ -289,7 +398,7 @@ void loop()
         switch (settingsState)
         {
           case Settings::Nothing:
-            state = State::Time;
+            state = State::Displaying;
             break;
 
           case Settings::Power:
@@ -300,21 +409,25 @@ void loop()
             resetSettings();
             updateEEPROM();
             number = 0;
-            state = State::Time;
+            state = State::Displaying;
             break;
           
           case Settings::Time:
             state = State::ChangingValue;
             break;
           
-          case Settings::Brightness:
+          case Settings::Speed:
+            state = State::ChangingValue;
+            break;
+
+          case Settings::Automation:
             state = State::ChangingValue;
             break;
         }
         break;
       
       case State::ChangingValue:
-        state = State::Time;
+        state = State::Displaying;
         updateEEPROMIfChanged();
         break;
     }
@@ -330,11 +443,26 @@ void loop()
   if (time - lastButton2Press == DEBOUNCE_TIME_MS && digitalRead(BUTTON_2) == HIGH)
   {
     lastButton2Press = -1;
+    Serial.println("BUTTON 2 activated");
 
     switch (state)
     {
       case State::Idle:
-        state = State::Time;
+      case State::Displaying:
+        if (!automate)
+        {
+          switch (operationState)
+          {
+            case OperationState::Open:
+              operationState = OperationState::Closing;
+              throbber_frame_direction = 1;
+              break;
+            case OperationState::Closed:
+              operationState = OperationState::Opening;
+              throbber_frame_direction = -1;
+              break;
+          }
+        }
         break;
 
       case State::Settings:
@@ -345,10 +473,14 @@ void loop()
             break;
           
           case Settings::Time:
-            settingsState = Settings::Brightness;
+            settingsState = Settings::Speed;
             break;
           
-          case Settings::Brightness:
+          case Settings::Speed:
+            settingsState = Settings::Automation;
+            break;
+          
+          case Settings::Automation:
             settingsState = Settings::Nothing;
             break;
 
@@ -370,9 +502,13 @@ void loop()
             tickTimeMs = timeModes[timeMode];
             break;
           
-          case Settings::Brightness:
-            if (++brightnessMode == BRIGTHNESS_MODES_MAX) brightnessMode = 0;
-            brightness = brightnessModes[brightnessMode];
+          case Settings::Speed:
+            if (++speedMode == SPEED_MODES_MAX) speedMode = 0;
+            speedIncrement = speedModes[speedMode];
+            break;
+          
+          case Settings::Automation:
+            automate = !automate;
             break;
         }
         break;
@@ -384,7 +520,20 @@ void loop()
     lastTick = time;
     if (dotTicked)
     {
-      if (++number == 10) number = 0;
+      if (can_count_down && --number == 0)
+      {
+        switch (operationState)
+        {
+          case OperationState::Closed:
+            operationState = OperationState::Opening;
+              throbber_frame_direction = -1;
+            break;
+          case OperationState::Open:
+            operationState = OperationState::Closing;
+              throbber_frame_direction = 1;
+            break;
+        }
+      }
     }
 
     dotTicked = !dotTicked;
@@ -397,8 +546,26 @@ void loop()
       writeSegmentData(SEGMENT_CLEAR);
       break;
 
-    case State::Time:
-      writeSegmentData(digits[number]);
+    case State::Displaying:
+      switch (operationState) {
+        case OperationState::Closed:
+          writeSegmentData(SYMBOL_DASH);
+          break;
+        case OperationState::Closing:
+        case OperationState::Opening:
+          writeSegmentData(throbber_frames[throbber_frame_number]);
+          break;
+        case OperationState::Open:
+          if (can_count_down)
+          {
+            writeSegmentData(digits[number]);
+          }
+          else
+          {
+            writeSegmentData(SYMBOL_DASH);
+          }
+          break;
+      }
       break;
 
     case State::Settings:
@@ -416,28 +583,36 @@ void loop()
         case Settings::Time:
           writeSegmentData(SYMBOL_T);
           break;
-        case Settings::Brightness:
-          writeSegmentData(SYMBOL_B);
+        case Settings::Speed:
+          writeSegmentData(SYMBOL_S);
+          break;
+        case Settings::Automation:
+          writeSegmentData(SYMBOL_A);
           break;
       }
       break;
       
     case State::ChangingValue:
-      short digit;
+      short digit = -1;
       switch (settingsState)
       {
         case Settings::Time:
           digit = timeMode + 1;
           break;
-        case Settings::Brightness:
-          digit = brightnessMode + 1;
+        case Settings::Speed:
+          digit = speedMode + 1;
+          break;
+        case Settings::Automation:
+          writeSegmentData(automate ? SYMBOL_Y : SYMBOL_N, false);
           break;
       }
-      writeSegmentData(digits[digit]);
+      if (digit != -1)
+        writeSegmentData(digits[digit]);
       break;
   }
 
-  analogWrite(BRIGHTNESS_PIN, brightness);
+  int servo_pos = map(door_position, 0, DOOR_POSITION_MAX, 750, 2250);
+  doorServo.write(servo_pos);
 }
 
 // from https://devcoons.com/crc8/
