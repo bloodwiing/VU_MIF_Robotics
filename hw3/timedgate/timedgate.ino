@@ -7,7 +7,7 @@
 
 #include <Arduino.h>
 #include <EEPROM.h>
-#include <ServoTimer2.h>
+#include <Servo.h>
 
 uint8_t CRC8(const uint8_t *data, int length);
 
@@ -146,7 +146,7 @@ OperationState operationState = OperationState::Closed;
 Settings settingsState = Settings::Power;
 UserData data;
 
-ServoTimer2 doorServo;
+Servo doorServo;
 
 byte segmentDisplayLastState = 0;
 
@@ -181,18 +181,19 @@ void setupTimer()
 {
   noInterrupts();
   // just reset to normal values
-  TCCR1A = 0;
-  TCCR1B = 0;
+  TCCR2A = 0;
+  TCCR2B = 0;
+  TCNT2  = 0;
   // clear timer on compare (CTC)
-  TCCR1B |= (1 << WGM12);
+  TCCR2A |= (1 << WGM21);
   // prescale so instead of 16Mhz we run timer at 250Khz ticks (every 0.004ms or 4us)
-  TCCR1B |= (1 << CS11) | (1 << CS10);
+  TCCR2B |= (1 << CS22);
   // comparison target
   // 0.004ms x [250 ticks] = 1ms
   // subtract -1 cause timer starts at 0 (must be lower than 65536)
-  OCR1A = 250 - 1;
+  OCR2A = 250 - 1;
   // enable compare A interrupt so we can utilise the timer event
-  TIMSK1 |= (1 << OCIE1A);
+  TIMSK2 |= (1 << OCIE2A);
   interrupts();
 }
 
@@ -206,7 +207,7 @@ void onButton2ISR()
   button2Event = true;
 }
 
-ISR(TIMER1_COMPA_vect)
+ISR(TIMER2_COMPA_vect)
 {
   timerEvent = true;
 }
