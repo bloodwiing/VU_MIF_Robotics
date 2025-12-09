@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Adafruit GFX Designer - V11 Duplicate Shape</title>
+    <style>
+        :root { --bg: #1e1e1e; --panel: #252525; --border: #3d3d3d; --accent: #007bff; --text: #cfcfcf; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; align-items: center; padding: 0; margin: 0; height: 100vh; overflow: hidden; }
+        
+        /* Layout Grid */
+        .app-container { display: grid; grid-template-columns: 240px 1fr 300px; width: 100%; height: 100%; }
+        
+        /* Panels */
+        .sidebar { background: var(--panel); border-right: 1px solid var(--border); padding: 15px; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; }
+        .sidebar-right { background: var(--panel); border-left: 1px solid var(--border); padding: 15px; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; }
+        .viewport { display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; background: #111; overflow: hidden; }
+
+        /* UI Elements */
+        h3 { margin: 0 0 10px 0; font-size: 0.9em; text-transform: uppercase; letter-spacing: 1px; color: #888; border-bottom: 1px solid #333; padding-bottom: 5px; }
+        button { padding: 8px; cursor: pointer; border: 1px solid var(--border); border-radius: 4px; background: #333; color: #eee; text-align: left; display: flex; align-items: center; gap: 8px; font-size: 0.9em; }
+        button:hover { background: #444; }
+        button.active { background: var(--accent); border-color: #0056b3; color: white; }
+        button.icon-btn { padding: 4px 8px; justify-content: center; }
+        button:disabled { background: #1a1a1a; color: #666; cursor: not-allowed; border-color: #111; }
+        
+        .row { display: flex; align-items: center; gap: 5px; }
+        .grow { flex: 1; }
+
+        /* Palette Grid */
+        .palette-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+        .swatch-container { position: relative; }
+        .swatch { width: 100%; aspect-ratio: 1; border-radius: 4px; border: 2px solid transparent; cursor: pointer; position: relative; }
+        .swatch.selected { border-color: white; box-shadow: 0 0 0 2px var(--accent); }
+        .swatch-color { position: absolute; top:0; left:0; width:100%; height:100%; border-radius: 4px; }
+        
+        /* Layers List */
+        .layer-list { display: flex; flex-direction: column; gap: 2px; flex: 1; overflow-y: auto; min-height: 100px; }
+        .layer-item { display: flex; align-items: center; padding: 6px; background: #333; border: 1px solid transparent; cursor: pointer; font-size: 0.85em; border-radius: 3px; }
+        .layer-item:hover { background: #3a3a3a; }
+        .layer-item.selected { background: #0050a0; border-color: #007bff; }
+        
+        .layer-group-header { padding: 4px 6px; margin: 4px 0; background: #444; border-radius: 3px; font-weight: bold; color: #aaa; font-size: 0.8em; }
+        .layer-item.grouped { margin-left: 10px; background: #3a3a3a; }
+        .layer-item.grouped:hover { background: #404040; }
+        .layer-item.grouped.selected { background: #0060b0; border-color: #007bff; }
+        
+        .layer-icon { width: 12px; height: 12px; margin-right: 8px; border: 1px solid #777; }
+        .group-label { color: #888; margin-left: 5px; font-weight: normal;}
+
+        /* Canvas */
+        canvas { background: #000; box-shadow: 0 0 30px rgba(0,0,0,0.5); image-rendering: pixelated; }
+        .canvas-wrapper { position: relative; border: 1px solid #333; }
+        
+        /* Code Box */
+        textarea { height: 150px; background: #151515; color: #0f0; border: 1px solid var(--border); padding: 8px; font-family: 'Consolas', monospace; font-size: 11px; resize: none; }
+
+        /* Inputs */
+        input[type="number"], input[type="text"] { width: 40px; background: #222; border: 1px solid #444; color: #fff; padding: 2px 4px; border-radius: 2px; }
+        input[type="text"] { width: 100%; }
+        
+        /* Header Bar for Actions */
+        .header-bar { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 10px 20px; box-sizing: border-box; background: #2d2d2d; border-bottom: 1px solid #3d3d3d; }
+        .header-bar .row { gap: 10px; }
+        
+        .zoom-controls { position: absolute; bottom: 20px; right: 20px; z-index: 10; display: flex; gap: 5px; }
+        .zoom-controls button { width: 30px; height: 30px; padding: 0; justify-content: center; }
+        .zoom-level { color: #888; font-size: 0.8em; margin: 0 5px; }
+    </style>
+</head>
+<body>
+
+<div class="header-bar">
+    <div class="row">
+        <button onclick="document.getElementById('fileLoad').click()" title="Load Project File">📁 Load</button>
+        <button onclick="saveProject()" title="Save Project File">💾 Save</button>
+        <input type="file" id="fileLoad" accept=".json" onchange="loadProject(event)" style="display:none;">
+    </div>
+    
+    <div class="row">
+        <button id="undoBtn" onclick="undo()" disabled title="Undo (Ctrl+Z)">⎌ Undo</button>
+        <button id="redoBtn" onclick="redo()" disabled title="Redo (Ctrl+Y)">⟳ Redo</button>
+    </div>
+    <div class="row">
+        <button onclick="toggleOrientation()" style="font-size:0.8em">⟲ Rotate Screen</button>
+    </div>
+</div>
+
+<div class="app-container">
+    
+    <div class="sidebar">
+        <h3>Design Tools</h3>
+        <button class="tool-btn active" id="t-select" onclick="setTool('select')">👆 Select / Move</button>
+        <button class="tool-btn" id="t-pixel" onclick="setTool('pixel')">✎ Pixel</button>
+        <button class="tool-btn" id="t-line" onclick="setTool('line')">/ Line</button>
+        <button class="tool-btn" id="t-rect" onclick="setTool('rect')">□ Rectangle</button>
+        <button class="tool-btn" id="t-circle" onclick="setTool('circle')">○ Circle</button>
+        
+        <div class="row">
+            <input type="checkbox" id="filled" checked> <label for="filled" style="font-size:0.9em">Filled</label>
+            <div class="grow"></div>
+            <input type="checkbox" id="showGrid" onchange="render()"> <label for="showGrid" style="font-size:0.9em">Grid (8px)</label>
+        </div>
+
+        <h3>Global Palette</h3>
+        <p style="font-size:0.75em; color:#888; margin-top:-5px;">Click to select slot. Use button to edit.</p>
+        <div class="palette-grid" id="paletteBox">
+            </div>
+        
+        <div class="row" style="margin-top:5px;">
+             <button onclick="addPaletteColor()" class="icon-btn" style="width:50%;">+ Add Color</button>
+             <button id="removeColorBtn" onclick="removePaletteColor()" class="icon-btn" style="width:50%;">- Remove Last</button>
+        </div>
+        
+        <div class="row" style="margin-top:10px;">
+            <div id="activeColorHex" style="font-family:monospace; color:#aaa; font-size:0.8em; flex-basis: 50%; text-align: center;">0xF800</div>
+            <input type="color" id="paletteColorInput" style="display:none;" onchange="updatePaletteColor(activePaletteIndex, this.value)">
+            <button onclick="document.getElementById('paletteColorInput').click()" style="width:50%; justify-content: center;">Edit Active</button>
+        </div>
+
+
+        <div id="propsPanel" style="display:none; margin-top:20px; border-top:1px solid #444; padding-top:10px;">
+            <h3>Edit Selected</h3>
+            
+            <div class="row" style="margin-bottom:8px;">
+                Name: <input type="text" id="p-name" onchange="updateProp('name', this.value)" style="width: 150px;">
+            </div>
+            
+            <div class="row" style="margin-bottom:5px;">
+                X: <input type="number" id="p-x" onchange="updateProp('x', this.value)">
+                Y: <input type="number" id="p-y" onchange="updateProp('y', this.value)">
+            </div>
+            <div class="row" style="margin-bottom:8px;">
+                W: <input type="number" id="p-w" onchange="updateProp('w', this.value)">
+                H: <input type="number" id="p-h" onchange="updateProp('h', this.value)">
+            </div>
+            <div class="row">
+                Group ID: <input type="number" id="p-group" onchange="updateProp('groupId', this.value)" style="width: 60px;"> (0 for none)
+            </div>
+        </div>
+    </div>
+
+    <div class="viewport">
+        <div class="canvas-wrapper">
+            <canvas id="canvas" width="128" height="160" style="width:384px; height:480px;"></canvas>
+        </div>
+        <div style="margin-top:5px; color:#555; font-size:0.8em;" id="dimsLabel">128 x 160</div>
+
+        <div class="zoom-controls">
+            <button onclick="setZoom(zoomLevel - 1)" title="Zoom Out">-</button>
+            <span class="zoom-level" id="zoomLevelText">3x</span>
+            <button onclick="setZoom(zoomLevel + 1)" title="Zoom In">+</button>
+        </div>
+    </div>
+
+    <div class="sidebar-right">
+        <h3>Layers</h3>
+        <div class="row" style="margin-bottom:5px;">
+            <button class="icon-btn" onclick="layerAction('up')" title="Move Up">▲</button>
+            <button class="icon-btn" onclick="layerAction('down')" title="Move Down">▼</button>
+            <button class="icon-btn" onclick="duplicateSelected()" title="Duplicate Selected">⎘</button> 
+            <div class="grow"></div>
+            <button class="icon-btn" style="background:#a33; border-color:#822;" onclick="deleteSelected()" title="Delete">🗑</button>
+        </div>
+        <div class="layer-list" id="layerList">
+            </div>
+
+        <h3>Output</h3>
+        <textarea id="codeOutput" readonly></textarea>
+        <button onclick="copyCode()">📋 Copy Code</button>
+        <button onclick="clearAll()" style="background:#444;">✖ Clear Project</button>
+    </div>
+
+</div>
+
+<script>
+    // --- Config ---
+    let zoomLevel = 3; 
+    const MAX_ZOOM = 10;
+    const MIN_ZOOM = 1;
+    const GRID_SIZE = 8;
+    const MAX_HISTORY = 100;
+    const HANDLE_SIZE = 1; // Size of the corner resize handles in pixels
+    
+    // --- State ---
+    let width = 128;
+    let height = 160;
+    let palette = ["#FF3333", "#33FF33", "#3333FF", "#FFFFFF"];
+    let activePaletteIndex = 0;
+    // Shape: { id, type, x, y, w, h, x2, y2, paletteIndex, filled, name, groupId }
+    let shapes = [];
+    let selectedShapeId = null;
+    let tool = 'select'; 
+    let isDrawing = false;
+    let currentShape = null; 
+    
+    // Move/Resize State
+    let moveOffset = {x:0, y:0}; // Offset for moving (mouse_pos - shape_x)
+    let groupMoveOffset = {x:0, y:0}; // Shape position at start of move
+    let resizingHandle = null; // 'tl', 'tr', 'bl', 'br'
+    let resizePivot = {x:0, y:0}; // The fixed corner opposite the handle
+    
+    // --- History State ---
+    let history = []; 
+    let historyIndex = -1; 
+    
+    // --- Setup Variables ---
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+
+    // --- CORE GLOBAL FUNCTIONS ---
+    
+    function setTool(t) {
+        tool = t;
+        document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+        const toolBtn = document.getElementById('t-' + t);
+        if (toolBtn) {
+            toolBtn.classList.add('active');
+        }
+        if(t !== 'select') { selectedShapeId = null; render(); }
+    }
+    
+    function render() {
+        ctx.setLineDash([]); 
+
+        // 1. Draw Background
+        ctx.fillStyle = "#000000";
+        ctx.fillRect(0, 0, width, height);
+
+        // 2. Draw Grid 
+        if(document.getElementById('showGrid').checked) {
+            ctx.strokeStyle = "#282828"; 
+            ctx.lineWidth = 1; 
+            ctx.beginPath();
+            for(let x=0; x<=width; x+=GRID_SIZE) { ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, height); }
+            for(let y=0; y<=height; y+=GRID_SIZE) { ctx.moveTo(0, y + 0.5); ctx.lineTo(width, y + 0.5); }
+            ctx.stroke();
+        }
+
+        // 3. Draw Shapes
+        shapes.forEach(s => drawShape(s, s.id === selectedShapeId));
+
+        // 4. Draw Active Shape (Ghost)
+        if(currentShape) drawShape(currentShape, false);
+
+        updateLayerList();
+        generateCode();
+        updatePropsPanel();
+        updateHistoryButtons();
+    }
+    
+    function setZoom(newZoom, initial=false) {
+        if (newZoom > MAX_ZOOM || newZoom < MIN_ZOOM) return;
+        zoomLevel = newZoom;
+        canvas.style.width = (width * zoomLevel) + "px";
+        canvas.style.height = (height * zoomLevel) + "px";
+        document.getElementById('zoomLevelText').innerText = zoomLevel + "x";
+    }
+
+    // --- Initialization ---
+
+    function initializeApp() {
+        saveHistory(true); 
+        initPaletteUI();
+        setZoom(zoomLevel, true); 
+        render();
+
+        canvas.addEventListener('mousedown', onMouseDown);
+        canvas.addEventListener('mousemove', onMouseMove);
+        canvas.addEventListener('mouseup', onMouseUp);
+    }
+    
+    // --- Save/Load System ---
+    
+    function exportState() {
+        return {
+            shapes: shapes,
+            palette: palette,
+            width: width,
+            height: height,
+            zoomLevel: zoomLevel,
+            history: history,
+            historyIndex: historyIndex
+        };
+    }
+
+    function saveProject() {
+        const state = exportState();
+        const json = JSON.stringify(state, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `tft_design_${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    function loadProject(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const loadedState = JSON.parse(e.target.result);
+                importState(loadedState);
+                console.log("Project loaded successfully.");
+            } catch (error) {
+                alert("Error loading project file. Make sure it is a valid TFT Designer JSON file.");
+                console.error("Loading error:", error);
+            }
+        };
+        reader.readAsText(file);
+    }
+    
+    function importState(state) {
+        // Core State
+        shapes = state.shapes || [];
+        palette = state.palette || ["#FF0000", "#00FF00", "#0000FF", "#FFFFFF"];
+        selectedShapeId = null;
+
+        // Canvas/View State
+        width = state.width || 128;
+        height = state.height || 160;
+        zoomLevel = state.zoomLevel || 3;
+        
+        // History State
+        history = state.history || [];
+        historyIndex = state.historyIndex !== undefined ? state.historyIndex : -1;
+        
+        // Apply changes
+        canvas.width = width; 
+        canvas.height = height;
+        document.getElementById('dimsLabel').innerText = `${width} x ${height}`;
+        
+        initPaletteUI();
+        setZoom(zoomLevel); 
+        render();
+    }
+
+
+    // --- Event Handlers ---
+
+    function onMouseDown(e) {
+        let pos = getPos(e);
+        isDrawing = true;
+
+        if (tool === 'select') {
+            
+            let s = selectedShapeId ? shapes.find(x => x.id === selectedShapeId) : null;
+            
+            // 1. Check for Resize Handles (only for Rectangles for now)
+            if (s && s.type === 'rect' && s.groupId === 0) { // No resizing for grouped items yet
+                resizingHandle = getHandle(s, pos.x, pos.y);
+            } else {
+                resizingHandle = null;
+            }
+            
+            if(resizingHandle) {
+                // Set the fixed pivot point (the corner opposite the handle)
+                if (resizingHandle === 'tl') resizePivot = { x: s.x + s.w, y: s.y + s.h };
+                else if (resizingHandle === 'tr') resizePivot = { x: s.x, y: s.y + s.h };
+                else if (resizingHandle === 'bl') resizePivot = { x: s.x + s.w, y: s.y };
+                else if (resizingHandle === 'br') resizePivot = { x: s.x, y: s.y };
+                
+                return; // Stop here if we are resizing
+            }
+
+
+            // 2. Check for Shape Selection/Moving
+            let clickedId = null;
+            for(let i=shapes.length-1; i>=0; i--) {
+                if(hitTest(shapes[i], pos.x, pos.y)) { 
+                    clickedId = shapes[i].id; 
+                    break; 
+                }
+            }
+            selectedShapeId = clickedId;
+
+            if(clickedId) {
+                s = shapes.find(x => x.id === clickedId);
+                moveOffset = {x: pos.x - s.x, y: pos.y - s.y};
+                groupMoveOffset.x = s.x;
+                groupMoveOffset.y = s.y;
+            }
+            render();
+        } else {
+            // New Shape
+            currentShape = {
+                id: Date.now(),
+                type: tool,
+                x: pos.x, y: pos.y, x2: pos.x, y2: pos.y, w:0, h:0,
+                paletteIndex: activePaletteIndex,
+                filled: document.getElementById('filled').checked,
+                name: tool + ' ' + (shapes.length + 1), 
+                groupId: 0 
+            };
+        }
+    }
+
+    function onMouseMove(e) {
+        if(!isDrawing) {
+            // Update cursor on hover for resize handles (non-drawing mode)
+            updateCursor(e); 
+            return;
+        }
+        
+        let pos = getPos(e);
+
+        let s = selectedShapeId ? shapes.find(x => x.id === selectedShapeId) : null;
+
+        if (tool === 'select') {
+            
+            if (resizingHandle && s && s.type === 'rect') {
+                // RESIZING LOGIC (Rectangles only)
+                
+                let newX, newY, newW, newH;
+                const pivotX = resizePivot.x;
+                const pivotY = resizePivot.y;
+                
+                // Calculate new dimensions and position based on mouse position (pos) and fixed pivot
+                
+                if (resizingHandle.includes('t')) { // Top handles
+                    newY = pos.y;
+                    newH = pivotY - newY;
+                } else if (resizingHandle.includes('b')) { // Bottom handles
+                    newY = pivotY;
+                    newH = pos.y - newY;
+                } else {
+                    newY = s.y;
+                    newH = s.h;
+                }
+                
+                if (resizingHandle.includes('l')) { // Left handles
+                    newX = pos.x;
+                    newW = pivotX - newX;
+                } else if (resizingHandle.includes('r')) { // Right handles
+                    newX = pivotX;
+                    newW = pos.x - newX;
+                } else {
+                    newX = s.x;
+                    newW = s.w;
+                }
+
+                // Apply updates, handling negative width/height (which flips x/y)
+                
+                // Handle Width/X
+                if (newW >= 0) { 
+                    s.x = newX; s.w = newW; 
+                } else {
+                    s.x = newX + newW; s.w = Math.abs(newW); 
+                }
+                if (s.w === 0) s.w = 1;
+
+                // Handle Height/Y
+                if (newH >= 0) { 
+                    s.y = newY; s.h = newH; 
+                } else {
+                    s.y = newY + newH; s.h = Math.abs(newH); 
+                }
+                if (s.h === 0) s.h = 1;
+                
+                render();
+                return; 
+            }
+            
+            // MOVING LOGIC
+            if (!s) return;
+            const dx = pos.x - (groupMoveOffset.x + moveOffset.x);
+            const dy = pos.y - (groupMoveOffset.y + moveOffset.y);
+            
+            const groupShapes = s.groupId > 0 ? shapes.filter(x => x.groupId === s.groupId) : [s];
+
+            groupShapes.forEach(member => {
+                member.x += dx;
+                member.y += dy;
+                if(member.type === 'line' || member.type === 'circle') {
+                    member.x2 += dx;
+                    member.y2 += dy;
+                }
+            });
+            
+            groupMoveOffset.x = pos.x - moveOffset.x;
+            groupMoveOffset.y = pos.y - moveOffset.y;
+            
+            render();
+
+        } else if(currentShape) {
+            // DRAWING LOGIC
+            if (tool === 'rect') {
+                currentShape.w = pos.x - currentShape.x;
+                currentShape.h = pos.y - currentShape.y;
+            } else {
+                currentShape.x2 = pos.x;
+                currentShape.y2 = pos.y;
+                if(tool === 'pixel') { currentShape.x = pos.x; currentShape.y = pos.y; }
+            }
+            render();
+        }
+    }
+
+    function onMouseUp() {
+        isDrawing = false;
+        
+        if (resizingHandle && selectedShapeId) {
+            // Resizing finished, save to history
+            resizingHandle = null;
+            saveHistory();
+        } else if(currentShape) {
+            // Drawing finished
+            if(currentShape.type === 'rect') {
+                // Finalize W/H and X/Y for rects drawn in reverse
+                if(currentShape.w < 0) { currentShape.x += currentShape.w; currentShape.w = Math.abs(currentShape.w); }
+                if(currentShape.h < 0) { currentShape.y += currentShape.h; currentShape.h = Math.abs(currentShape.h); }
+                if(currentShape.w === 0) { currentShape.w = 1; currentShape.h = 1; }
+            }
+            shapes.push(currentShape);
+            currentShape = null;
+            
+            selectedShapeId = shapes[shapes.length-1].id;
+            setTool('select');
+            saveHistory(); 
+        } else if (tool === 'select' && selectedShapeId) {
+            // Moving finished
+            saveHistory(); 
+        }
+        
+        // Reset cursor and render
+        canvas.style.cursor = 'default';
+        render();
+    }
+    
+    // --- Drawing Utilities ---
+    
+    function drawShape(s, isSelected) {
+        let color = palette[s.paletteIndex];
+        ctx.fillStyle = color;
+        ctx.strokeStyle = color;
+        
+        ctx.setLineDash([]);
+        ctx.lineWidth = 1;
+
+        ctx.beginPath();
+        if(s.type === 'pixel') {
+            ctx.fillRect(s.x, s.y, 1, 1);
+            if(isSelected) { ctx.strokeStyle="#fff"; ctx.strokeRect(s.x-1, s.y-1, 3, 3); }
+        } else if(s.type === 'line') {
+            ctx.moveTo(s.x, s.y);
+            ctx.lineTo(s.x2, s.y2);
+            ctx.stroke();
+            if(isSelected) { 
+                ctx.setLineDash([2,2]); 
+                ctx.strokeStyle="#0af"; 
+                ctx.beginPath(); 
+                ctx.moveTo(s.x, s.y); 
+                ctx.lineTo(s.x2, s.y2); 
+                ctx.stroke(); 
+            }
+        } else if(s.type === 'rect') {
+            // Handle negative dimensions during draw operation for visual feedback
+            const drawX = s.w < 0 ? s.x + s.w : s.x;
+            const drawY = s.h < 0 ? s.y + s.h : s.y;
+            const drawW = Math.abs(s.w);
+            const drawH = Math.abs(s.h);
+            
+            if(s.filled) ctx.fillRect(drawX, drawY, drawW, drawH);
+            else ctx.strokeRect(drawX+0.5, drawY+0.5, drawW, drawH);
+            
+            if(isSelected) { 
+                ctx.setLineDash([2,2]); 
+                ctx.strokeStyle="#0af"; 
+                ctx.strokeRect(drawX-1, drawY-1, drawW+2, drawH+2); 
+                
+                // Draw Resize Handles using absolute corners
+                ctx.fillStyle = '#0af';
+                const x1 = s.x;
+                const y1 = s.y;
+                const x2 = s.x + s.w;
+                const y2 = s.y + s.h;
+
+                drawHandle(Math.min(x1, x2) - HANDLE_SIZE, Math.min(y1, y2) - HANDLE_SIZE); // TL
+                drawHandle(Math.max(x1, x2) - HANDLE_SIZE, Math.min(y1, y2) - HANDLE_SIZE); // TR
+                drawHandle(Math.min(x1, x2) - HANDLE_SIZE, Math.max(y1, y2) - HANDLE_SIZE); // BL
+                drawHandle(Math.max(x1, x2) - HANDLE_SIZE, Math.max(y1, y2) - HANDLE_SIZE); // BR
+            }
+        } else if(s.type === 'circle') {
+            let r = Math.round(Math.sqrt(Math.pow(s.x2 - s.x, 2) + Math.pow(s.y2 - s.y, 2)));
+            ctx.arc(s.x, s.y, r, 0, Math.PI*2);
+            if(s.filled) ctx.fill();
+            else ctx.stroke();
+            
+            if(isSelected) { 
+                ctx.setLineDash([2,2]); 
+                ctx.strokeStyle="#0af"; 
+                ctx.beginPath(); 
+                ctx.arc(s.x, s.y, r+2, 0, Math.PI*2); 
+                ctx.stroke(); 
+            }
+        }
+        ctx.setLineDash([]); 
+    }
+    
+    function drawHandle(x, y) {
+        ctx.fillRect(x, y, HANDLE_SIZE * 2, HANDLE_SIZE * 2);
+        ctx.strokeStyle = '#fff';
+        ctx.strokeRect(x, y, HANDLE_SIZE * 2, HANDLE_SIZE * 2);
+    }
+
+    function getPos(e) {
+        let rect = canvas.getBoundingClientRect();
+        return {
+            x: Math.floor((e.clientX - rect.left) / zoomLevel),
+            y: Math.floor((e.clientY - rect.top) / zoomLevel)
+        };
+    }
+    
+    function hitTest(s, mx, my) {
+        if(s.type === 'pixel') return Math.abs(mx-s.x)<2 && Math.abs(my-s.y)<2;
+        if(s.type === 'rect') {
+            const minX = Math.min(s.x, s.x + s.w);
+            const maxX = Math.max(s.x, s.x + s.w);
+            const minY = Math.min(s.y, s.y + s.h);
+            const maxY = Math.max(s.y, s.y + s.h);
+            return mx >= minX && mx <= maxX && my >= minY && my <= maxY;
+        }
+        if(s.type === 'circle') {
+            let r = Math.sqrt(Math.pow(s.x2-s.x,2) + Math.pow(s.y2-s.y,2));
+            let d = Math.sqrt(Math.pow(mx-s.x,2) + Math.pow(my-s.y,2));
+            return s.filled ? d<=r : Math.abs(d-r)<5;
+        }
+        if(s.type === 'line') {
+            return Math.abs((s.y2-s.y)*mx - (s.x2-s.x)*my + s.x2*s.y - s.y2*s.x) / Math.sqrt(Math.pow(s.y2-s.y,2) + Math.pow(s.x2-s.x,2)) < 5 
+                   && mx >= Math.min(s.x,s.x2)-5 && mx <= Math.max(s.x,s.x2)+5 
+                   && my >= Math.min(s.y,s.y2)-5 && my <= Math.max(s.y,s.y2)+5;
+        }
+        return false;
+    }
+    
+    function getHandle(s, mx, my) {
+        if (s.type !== 'rect') return null;
+        
+        const hitZone = HANDLE_SIZE * 2;
+        
+        // Use absolute coordinates for handle placement regardless of w/h sign
+        const x1 = s.x;
+        const y1 = s.y;
+        const x2 = s.x + s.w;
+        const y2 = s.y + s.h;
+        
+        const minX = Math.min(x1, x2);
+        const maxX = Math.max(x1, x2);
+        const minY = Math.min(y1, y2);
+        const maxY = Math.max(y1, y2);
+        
+        // Define handle positions (top-left corners of the handles)
+        const handles = {
+            'tl': {x: minX - HANDLE_SIZE, y: minY - HANDLE_SIZE},
+            'tr': {x: maxX - HANDLE_SIZE, y: minY - HANDLE_SIZE},
+            'bl': {x: minX - HANDLE_SIZE, y: maxY - HANDLE_SIZE},
+            'br': {x: maxX - HANDLE_SIZE, y: maxY - HANDLE_SIZE}
+        };
+
+        for (const key in handles) {
+            const h = handles[key];
+            if (mx >= h.x && mx <= h.x + hitZone && my >= h.y && my <= h.y + hitZone) {
+                return key;
+            }
+        }
+        return null;
+    }
+
+    function updateCursor(e) {
+        if (tool !== 'select' || isDrawing) return;
+        
+        let pos = getPos(e);
+        let s = selectedShapeId ? shapes.find(x => x.id === selectedShapeId) : null;
+        if (!s || s.type !== 'rect' || s.groupId > 0) { // No resizing for grouped items yet
+            canvas.style.cursor = hitTest(s, pos.x, pos.y) ? 'move' : 'default';
+            return;
+        }
+        
+        const handle = getHandle(s, pos.x, pos.y);
+        
+        if (handle) {
+            switch (handle) {
+                case 'tl':
+                case 'br':
+                    canvas.style.cursor = 'nwse-resize';
+                    break;
+                case 'tr':
+                case 'bl':
+                    canvas.style.cursor = 'nesw-resize';
+                    break;
+            }
+        } else {
+            canvas.style.cursor = hitTest(s, pos.x, pos.y) ? 'move' : 'default';
+        }
+    }
+
+    
+    // --- Other Utility Functions (Including Duplicate) ---
+    
+    function duplicateSelected() {
+        if (!selectedShapeId) return;
+        
+        const original = shapes.find(x => x.id === selectedShapeId);
+        if (!original) return;
+
+        // 1. Deep clone the object
+        const copy = JSON.parse(JSON.stringify(original));
+
+        // 2. Assign new ID
+        copy.id = Date.now();
+        
+        // 3. Offset position by 10 pixels
+        const offset = 10;
+        copy.x += offset;
+        copy.y += offset;
+        
+        // Update secondary coordinates for line/circle (rect uses w/h)
+        if (copy.type === 'line' || copy.type === 'circle') {
+            copy.x2 += offset;
+            copy.y2 += offset;
+        }
+        
+        // Update name
+        copy.name = original.name + ' Copy';
+
+        // 4. Add to shapes list
+        shapes.push(copy);
+
+        // 5. Select the new shape
+        selectedShapeId = copy.id;
+        
+        saveHistory();
+        render();
+    }
+
+    function updateLayerList() {
+        const list = document.getElementById('layerList');
+        list.innerHTML = '';
+        
+        const reversedShapes = [...shapes].reverse();
+        const groupedLayers = {}; 
+        reversedShapes.forEach(s => {
+            const id = s.groupId > 0 ? s.groupId : 0;
+            if (!groupedLayers[id]) groupedLayers[id] = [];
+            groupedLayers[id].push(s);
+        });
+
+        const groupKeys = Object.keys(groupedLayers).sort((a, b) => a - b);
+        
+        groupKeys.forEach(key => {
+            const groupId = parseInt(key);
+            const layers = groupedLayers[groupId];
+
+            if (groupId > 0) {
+                let header = document.createElement('div');
+                header.className = 'layer-group-header';
+                header.innerText = `Group ${groupId} (${layers.length} items)`;
+                list.appendChild(header);
+            }
+
+            layers.forEach(s => {
+                let el = document.createElement('div');
+                el.className = `layer-item ${s.id === selectedShapeId ? 'selected' : ''} ${groupId > 0 ? 'grouped' : ''}`;
+                el.onclick = () => { selectedShapeId = s.id; render(); };
+                let hex = palette[s.paletteIndex];
+                let name = s.name || s.type;
+                
+                el.innerHTML = `<div class="layer-icon" style="background:${hex}"></div><span>${name}</span>`;
+                list.appendChild(el);
+            });
+        });
+    }
+
+    function updateProp(prop, val) {
+        if(!selectedShapeId) return;
+        let s = shapes.find(x => x.id === selectedShapeId);
+        
+        if (prop === 'groupId') {
+             s[prop] = parseInt(val) || 0;
+        } else if (prop === 'name') {
+             s[prop] = val;
+        } else {
+            s[prop] = parseInt(val);
+            if(prop==='w' && (s.type==='line'||s.type==='circle')) s.x2 = parseInt(val);
+            if(prop==='h' && (s.type==='line'||s.type==='circle')) s.y2 = parseInt(val);
+        }
+
+        saveHistory(); 
+        render();
+    }
+
+    function updatePropsPanel() {
+        const p = document.getElementById('propsPanel');
+        if(!selectedShapeId) { p.style.display='none'; return; }
+        p.style.display='block';
+        let s = shapes.find(x => x.id === selectedShapeId);
+        
+        document.getElementById('p-name').value = s.name || '';
+        document.getElementById('p-group').value = s.groupId || 0;
+        
+        document.getElementById('p-x').value = s.x;
+        document.getElementById('p-y').value = s.y;
+        
+        if(s.type === 'rect') {
+             document.getElementById('p-w').value = s.w;
+             document.getElementById('p-h').value = s.h;
+        } else if(s.type === 'line' || s.type === 'circle') {
+             document.getElementById('p-w').value = s.x2;
+             document.getElementById('p-h').value = s.y2;
+        }
+    }
+    
+    function initPaletteUI() {
+        const pBox = document.getElementById('paletteBox');
+        pBox.innerHTML = '';
+        palette.forEach((hex, index) => {
+            let div = document.createElement('div');
+            div.className = `swatch-container`;
+            div.innerHTML = `
+                <div class="swatch ${index === activePaletteIndex ? 'selected' : ''}" onclick="selectPalette(${index})">
+                    <div class="swatch-color" style="background-color:${hex}"></div>
+                </div>
+            `;
+            pBox.appendChild(div);
+        });
+        updateHexLabel();
+        document.getElementById('removeColorBtn').disabled = palette.length <= 1;
+    }
+
+    function selectPalette(idx) {
+        activePaletteIndex = idx;
+        
+        if(selectedShapeId && tool === 'select') {
+            let s = shapes.find(x => x.id === selectedShapeId);
+            if(s) s.paletteIndex = idx;
+            saveHistory();
+        }
+        
+        initPaletteUI();
+        updateHexLabel();
+    }
+
+    function updatePaletteColor(idx, newHex) {
+        palette[idx] = newHex;
+        initPaletteUI();
+        saveHistory();
+        render();
+    }
+    
+    function addPaletteColor() {
+        palette.push("#FFFFFF");
+        initPaletteUI();
+        saveHistory();
+    }
+
+    function removePaletteColor() {
+        if(palette.length <= 1) return;
+        
+        const removedIndex = palette.length - 1;
+        palette.pop();
+        
+        const newIndex = palette.length - 1;
+        shapes.forEach(s => {
+            if (s.paletteIndex === removedIndex) {
+                s.paletteIndex = newIndex;
+            }
+        });
+
+        if (activePaletteIndex >= palette.length) {
+            activePaletteIndex = palette.length - 1;
+        }
+
+        initPaletteUI();
+        saveHistory();
+        render();
+    }
+
+    function updateHexLabel() {
+        document.getElementById('activeColorHex').innerText = colorToRGB565(palette[activePaletteIndex]);
+        document.getElementById('paletteColorInput').value = palette[activePaletteIndex];
+    }
+    
+    function updateHistoryButtons() {
+        document.getElementById('undoBtn').disabled = historyIndex <= 0;
+        document.getElementById('redoBtn').disabled = historyIndex >= history.length - 1;
+    }
+
+    function saveHistory(force = false) {
+        const stateForHistory = { 
+            shapes: JSON.stringify(shapes), 
+            palette: JSON.stringify(palette) 
+        };
+        
+        if (historyIndex >= 0 && !force) {
+            const lastState = history[historyIndex];
+            if (lastState.shapes === stateForHistory.shapes && lastState.palette === stateForHistory.palette) {
+                return; 
+            }
+        }
+        
+        if (historyIndex < history.length - 1) {
+            history = history.slice(0, historyIndex + 1);
+        }
+
+        history.push(stateForHistory);
+        
+        if (history.length > MAX_HISTORY) {
+            history.shift();
+        } else {
+            historyIndex++;
+        }
+        
+        updateHistoryButtons();
+    }
+
+    function loadState(index) {
+        if (index < 0 || index >= history.length) return;
+        
+        historyIndex = index;
+        const state = history[historyIndex];
+        
+        shapes = JSON.parse(state.shapes);
+        palette = JSON.parse(state.palette);
+        
+        if (selectedShapeId && !shapes.find(s => s.id === selectedShapeId)) {
+            selectedShapeId = null;
+        }
+
+        initPaletteUI();
+        render();
+    }
+
+    function undo() { if (historyIndex > 0) loadState(historyIndex - 1); }
+    function redo() { if (historyIndex < history.length - 1) loadState(historyIndex + 1); }
+    
+    function toggleOrientation() {
+        if(width === 128) { width = 160; height = 128; }
+        else { width = 128; height = 160; }
+        canvas.width = width; canvas.height = height;
+        canvas.style.width = (width * zoomLevel) + "px"; 
+        canvas.style.height = (height * zoomLevel) + "px";
+        document.getElementById('dimsLabel').innerText = `${width} x ${height}`;
+        render();
+    }
+    
+    function layerAction(action) {
+        if(!selectedShapeId) return;
+        let idx = shapes.findIndex(x => x.id === selectedShapeId);
+        if(idx === -1) return;
+
+        if(action === 'up' && idx < shapes.length-1) {
+            [shapes[idx], shapes[idx+1]] = [shapes[idx+1], shapes[idx]];
+            saveHistory();
+        }
+        if(action === 'down' && idx > 0) {
+            [shapes[idx], shapes[idx-1]] = [shapes[idx-1], shapes[idx]];
+            saveHistory();
+        }
+        render();
+    }
+
+    function deleteSelected() {
+        if(selectedShapeId) {
+            shapes = shapes.filter(s => s.id !== selectedShapeId);
+            selectedShapeId = null;
+            saveHistory();
+            render();
+        }
+    }
+
+    function clearAll() {
+        if(confirm("Clear everything?")) { 
+            shapes = []; 
+            selectedShapeId = null; 
+            saveHistory();
+            render(); 
+        }
+    }
+    
+    function colorToRGB565(hex) {
+        let r = parseInt(hex.slice(1, 3), 16);
+        let g = parseInt(hex.slice(3, 5), 16);
+        let b = parseInt(hex.slice(5, 7), 16);
+        let c = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
+        return "0x" + c.toString(16).toUpperCase().padStart(4, '0');
+    }
+
+    function generateCode() {
+        let code = "";
+        shapes.forEach(s => {
+            let hex = palette[s.paletteIndex];
+            let col = colorToRGB565(hex);
+            
+            // Use Math.abs for W/H to ensure correct output for shapes drawn in reverse
+            const w = Math.abs(s.w);
+            const h = Math.abs(s.h);
+            const x = Math.min(s.x, s.x + s.w);
+            const y = Math.min(s.y, s.y + s.h);
+
+            if (s.type === 'pixel') code += `TFTscreen.drawPixel(${s.x}, ${s.y}, ${col});\n`;
+            else if (s.type === 'line') code += `TFTscreen.drawLine(${s.x}, ${s.y}, ${s.x2}, ${s.y2}, ${col});\n`;
+            else if (s.type === 'rect') code += `TFTscreen.${s.filled?'fillRect':'drawRect'}(${x}, ${y}, ${w}, ${h}, ${col});\n`;
+            else if (s.type === 'circle') {
+                let r = Math.round(Math.sqrt(Math.pow(s.x2-s.x,2)+Math.pow(s.y2-s.y,2)));
+                code += `TFTscreen.${s.filled?'fillCircle':'drawCircle'}(${s.x}, ${s.y}, ${r}, ${col});\n`;
+            }
+        });
+        document.getElementById('codeOutput').value = code;
+    }
+
+    function copyCode() {
+        document.getElementById('codeOutput').select();
+        document.execCommand('copy');
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey || e.metaKey) {
+            if (e.key === 'z') { e.preventDefault(); undo(); }
+            if (e.key === 'y') { e.preventDefault(); redo(); }
+            if (e.key === 'd' && selectedShapeId) { e.preventDefault(); duplicateSelected(); }
+        }
+    });
+
+    // Run initialization logic after the script is loaded
+    initializeApp();
+
+</script>
+</body>
+</html>
