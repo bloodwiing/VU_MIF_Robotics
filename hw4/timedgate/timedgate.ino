@@ -12,6 +12,7 @@
 #include <Adafruit_ST7735.h>
 #include "dial.h"
 #include "draw.h"
+#include "constants.h"
 
 uint8_t CRC8(const uint8_t *data, int length);
 
@@ -30,7 +31,7 @@ const int SERVO_PIN  = 5;
 const int SENSOR_PIN = A0;
 
 const int DEBOUNCE_TIME_MS = 20;
-const int DEBOUNCE_SWITCH_TIME_MS = 100;
+const int DEBOUNCE_SWITCH_TIME_MS = 60;
 const int SENSOR_REACT_THRESHOLD = 400;
 
 enum class State : uint8_t
@@ -87,11 +88,14 @@ const uint32_t speedModes[] = {1, 2, 5, 10, 45, 90, 180};
 
 volatile bool buttonOKEvent = false;
 volatile bool button1Event = false;
+volatile bool button2State = false;
 volatile bool timerEvent = false;
 
 int32_t dialValue = 0;
 
 uint32_t time = 0;
+uint32_t frame = 0;
+uint32_t lastFrame = 0;
 uint32_t lastButtonOKPress = 0;
 uint32_t lastButton1Press = 0;
 
@@ -158,8 +162,8 @@ void onButtonOKISR()
 
 void onButton1ISR()
 {
-  dialValue += digitalRead(BUTTON_2) == LOW ? 1 : -1;
   button1Event = true;
+  button2State = digitalRead(BUTTON_2) == LOW;
 }
 
 ISR(TIMER2_COMPA_vect)
@@ -183,7 +187,7 @@ void validateEEPROM()
 
   if (data.magic != USER_DATA_MAGIC || data.version != USER_DATA_VERSION)
   { 
-    Serial.println("Magic or version mismatch! Resetting settings");
+    Serial.println(F("Magic or version mismatch! Resetting settings"));
     resetSettings();
     updateEEPROM();
     return;
@@ -192,7 +196,7 @@ void validateEEPROM()
   uint8_t crc = CRC8((uint8_t*)&data, sizeof(data) - 1);
   if (data.crc != crc)
   {
-    Serial.println("CRC mismatch! Resetting settings");
+    Serial.println(F("CRC mismatch! Resetting settings"));
     resetSettings();
     updateEEPROM();
     return;
@@ -220,7 +224,7 @@ void updateEEPROM()
   uint8_t crc = CRC8((uint8_t*)&data, sizeof(data) - 1);
   data.crc = crc;
 
-  Serial.println("Updating EEPROM");
+  Serial.println(F("Updating EEPROM"));
   EEPROM.put(USER_DATA_EEPORM_ADDRESS, data);
 }
 
@@ -230,7 +234,7 @@ void updateEEPROMIfChanged()
       && data.speedMode == speedMode
       && data.automaticMode == automate)
   {
-    Serial.println("EEPROM matches, no need to update");
+    Serial.println(F("EEPROM matches, no need to update"));
     return;
   }
 
@@ -274,6 +278,7 @@ void loop()
   {
     timerEvent = false;
     time++;
+    frame++;
 
     int sensor_val = analogRead(SENSOR_PIN);
     if (automate && sensor_val >= SENSOR_REACT_THRESHOLD && operationState == OperationState::Closed)
@@ -339,7 +344,7 @@ void loop()
   if (time - lastButtonOKPress == DEBOUNCE_TIME_MS && digitalRead(BUTTON_OK) == LOW)
   {
     lastButtonOKPress = -1;
-    Serial.println("BUTTON OK activated");
+    Serial.println(F("BUTTON OK activated"));
 
     TFTscreen.fillScreen(0);
     screenNeedsRefresh = true;
@@ -363,6 +368,8 @@ void loop()
             resetSettings();
             updateEEPROM();
             number = 0;
+            hours = 12;
+            minutes = 0;
             state = State::Displaying;
             break;
           
@@ -423,8 +430,10 @@ void loop()
 
   if (time - lastButton1Press == DEBOUNCE_SWITCH_TIME_MS)
   {
+    dialValue += button2State ? 1 : -1;
+    
     lastButton1Press = -1;
-    Serial.println("BUTTON 1 activated");
+    Serial.println(F("BUTTON 1 activated"));
 
     switch (state)
     {
@@ -451,8 +460,12 @@ void loop()
             } else if (dialValue < 0) {
               dialValue = 0;
             }
+            if (timeMode != dialValue) {
+              timeMode = dialValue;
+              frame = 0;
+            }
             updateDialWheel(dial, dialValue, TFTscreen);
-            drawDigit(TFTscreen, dialValue);
+            drawDigit(TFTscreen, dialValue, frame);
             tickTimeMs = timeModes[timeMode];
             break;
           
@@ -462,8 +475,12 @@ void loop()
             } else if (dialValue < 0) {
               dialValue = 0;
             }
+            if (speedMode != dialValue) {
+              speedMode = dialValue;
+              frame = 0;
+            }
             updateDialWheel(dial, dialValue, TFTscreen);
-            drawDigit(TFTscreen, dialValue);
+            drawDigit(TFTscreen, dialValue, frame);
             speedIncrement = speedModes[speedMode];
             break;
           
@@ -493,68 +510,6 @@ void loop()
         }
         break;
     }
-
-  //   switch (state)
-  //   {
-  //     case State::Displaying:
-  //       if (!automate)
-  //       {
-  //         switch (operationState)
-  //         {
-  //           case OperationState::Open:
-  //             operationState = OperationState::Closing;
-  //             break;
-  //           case OperationState::Closed:
-  //             operationState = OperationState::Opening;
-  //             break;
-  //         }
-  //       }
-  //       break;
-
-  //     case State::Settings:
-  //       switch (settingsState)
-  //       {
-  //         case Settings::Time:
-  //           settingsState = Settings::Speed;
-  //           break;
-          
-  //         case Settings::Speed:
-  //           settingsState = Settings::Automation;
-  //           break;
-          
-  //         case Settings::Automation:
-  //           settingsState = Settings::Nothing;
-  //           break;
-
-  //         case Settings::Nothing:
-  //           settingsState = Settings::Reset;
-  //           break;
-          
-  //         case Settings::Reset:
-  //           settingsState = Settings::Time;
-  //           break;
-  //       }
-  //       break;
-      
-  //     case State::ChangingValue:
-  //       switch (settingsState)
-  //       {
-  //         case Settings::Time:
-  //           if (++timeMode == TIME_MODES_MAX) timeMode = 0;
-  //           tickTimeMs = timeModes[timeMode];
-  //           break;
-          
-  //         case Settings::Speed:
-  //           if (++speedMode == SPEED_MODES_MAX) speedMode = 0;
-  //           speedIncrement = speedModes[speedMode];
-  //           break;
-          
-  //         case Settings::Automation:
-  //           automate = !automate;
-  //           break;
-  //       }
-  //       break;
-    // }
   }
 
   if (time - lastTick >= tickTimeMs)
@@ -592,7 +547,7 @@ void loop()
     case State::Settings:
       if (screenNeedsRefresh) {
         screenNeedsRefresh = false;
-        Serial.println("REFRESHING");
+        Serial.println(F("REFRESHING"));
         drawTitle(TFTscreen, "SETTINGS");
         int minToDraw = settingsTab > 0 ? settingsTab - 1 : 0;
         if (minToDraw + 2 > settingTabsCount) {
@@ -611,13 +566,13 @@ void loop()
             drawTitleSubtitle(TFTscreen, "SETTINGS", "TIMING");
             redrawDialWheel(dial, TFTscreen);
             updateDialWheel(dial, dialValue, TFTscreen);
-            drawDigit(TFTscreen, dialValue);
+            drawDigit(TFTscreen, dialValue, frame);
             break;
           case Settings::Speed:
             drawTitleSubtitle(TFTscreen, "SETTINGS", "SPEED");
             redrawDialWheel(dial, TFTscreen);
             updateDialWheel(dial, dialValue, TFTscreen);
-            drawDigit(TFTscreen, dialValue);
+            drawDigit(TFTscreen, dialValue, frame);
             break;
           case Settings::Automation:
             drawTitleSubtitle(TFTscreen, "SETTINGS", "AUTOMATION");
@@ -632,6 +587,22 @@ void loop()
             drawMinutes(TFTscreen, newMinutes, 0, 20, changingMinutes ? 0x37E6 : 0xFFFF);
             break;
         }
+      }
+      if (frame < ANIMATION_FRAMES && lastFrame != frame)
+      {
+        lastFrame = frame;
+        switch (settingTabEnums[settingsTab])
+          {
+            case Settings::Time:
+              drawDigit(TFTscreen, dialValue, frame);
+              break;
+            case Settings::Speed:
+              drawDigit(TFTscreen, dialValue, frame);
+              break;
+            case Settings::Automation:
+              drawChar(TFTscreen, automate ? 'Y' : 'N');
+              break;
+          }
       }
       break;
   }

@@ -1,5 +1,5 @@
-#include <stdint.h>
 #pragma once
+#include <stdint.h>
 #include "Arduino.h"
 #include "dial_gradient.h"
 #include "draw_shapes.h"

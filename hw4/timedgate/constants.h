@@ -1,0 +1,3 @@
+#pragma once
+#define ANIMATION_FRAMES 1
+#define ANIMATION_SNAPPINESS 5
