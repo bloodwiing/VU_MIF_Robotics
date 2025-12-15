@@ -25,11 +25,12 @@ const int LCD_RST    = 8;
 const int BUTTON_OK  = 2;
 const int BUTTON_2   = 4;
 const int BUTTON_1   = 3;
-const int BRIGHTNESS_PIN = 11;
+const int BRIGHTNESS_PIN = 6;
 const int SERVO_PIN  = 5;
 const int SENSOR_PIN = A0;
 
 const int DEBOUNCE_TIME_MS = 20;
+const int DEBOUNCE_SWITCH_TIME_MS = 100;
 const int SENSOR_REACT_THRESHOLD = 400;
 
 enum class State : uint8_t
@@ -121,6 +122,10 @@ uint16_t hours = 12;
 uint16_t minutes = 0;
 uint32_t miliseconds = 0;
 const uint32_t CLOCK_TICK_LOOK_FOR = 1000;
+
+uint16_t newHours = 0;
+uint16_t newMinutes = 0;
+bool changingMinutes = false;
 
 bool screenNeedsRefresh = true;
 
@@ -236,10 +241,10 @@ void setup()
 { 
   Serial.begin(9600);
 
-  for(int i = 4; i <= 12; i++)
-  {
-    pinMode(i, OUTPUT);
-  }
+  pinMode(LCD_RST, OUTPUT);
+  pinMode(LCD_DC, OUTPUT);
+  pinMode(LCD_CS, OUTPUT);
+  pinMode(BRIGHTNESS_PIN, OUTPUT);
 
   pinMode(BUTTON_1, INPUT);
   pinMode(BUTTON_2, INPUT);
@@ -264,6 +269,7 @@ void setup()
 
 void loop()
 {
+  analogWrite(BRIGHTNESS_PIN, 125);
   if (timerEvent)
   {
     timerEvent = false;
@@ -330,7 +336,7 @@ void loop()
     lastButtonOKPress = time;
   }
 
-  if (time - lastButtonOKPress == DEBOUNCE_TIME_MS)
+  if (time - lastButtonOKPress == DEBOUNCE_TIME_MS && digitalRead(BUTTON_OK) == LOW)
   {
     lastButtonOKPress = -1;
     Serial.println("BUTTON OK activated");
@@ -366,6 +372,14 @@ void loop()
             dial->max = TIME_MODES_MAX-1;
             break;
           
+          case Settings::Clock:
+            state = State::ChangingValue;
+            newHours = hours;
+            newMinutes = minutes;
+            changingMinutes = false;
+            dialValue = hours;
+            break;
+          
           case Settings::Speed:
             state = State::ChangingValue;
             dialValue = speedMode;
@@ -381,6 +395,19 @@ void loop()
         break;
       
       case State::ChangingValue:
+        if (settingTabEnums[settingsTab] == Settings::Clock) {
+          if (changingMinutes == false)
+          {
+            changingMinutes = true;
+            newHours = dialValue;
+            dialValue = newMinutes;
+            screenNeedsRefresh = true;
+            break;
+          } else {
+            hours = newHours;
+            minutes = dialValue;
+          }
+        }
         state = State::Settings;
         updateEEPROMIfChanged();
         break;
@@ -394,7 +421,7 @@ void loop()
     lastButton1Press = time;
   }
 
-  if (time - lastButton1Press == DEBOUNCE_TIME_MS)
+  if (time - lastButton1Press == DEBOUNCE_SWITCH_TIME_MS)
   {
     lastButton1Press = -1;
     Serial.println("BUTTON 1 activated");
@@ -449,6 +476,19 @@ void loop()
             updateDialWheel(dial, dialValue, TFTscreen);
             automate = dialValue == 1;
             drawChar(TFTscreen, automate ? 'Y' : 'N');
+            break;
+          
+          case Settings::Clock:
+            if (dialValue > (changingMinutes ? 59 : 23)) {
+              dialValue = 0;
+            } else if (dialValue < 0) {
+              dialValue = changingMinutes ? 59 : 23;
+            }
+            if (changingMinutes) {
+              drawMinutes(TFTscreen, dialValue, 0, 20, 0x37E6);
+            } else {
+              drawHours(TFTscreen, dialValue, 0, 20, 0x37E6);
+            }
             break;
         }
         break;
@@ -569,21 +609,29 @@ void loop()
         {
           case Settings::Time:
             drawTitleSubtitle(TFTscreen, "SETTINGS", "TIMING");
+            redrawDialWheel(dial, TFTscreen);
             updateDialWheel(dial, dialValue, TFTscreen);
             drawDigit(TFTscreen, dialValue);
             break;
           case Settings::Speed:
             drawTitleSubtitle(TFTscreen, "SETTINGS", "SPEED");
+            redrawDialWheel(dial, TFTscreen);
             updateDialWheel(dial, dialValue, TFTscreen);
             drawDigit(TFTscreen, dialValue);
             break;
           case Settings::Automation:
             drawTitleSubtitle(TFTscreen, "SETTINGS", "AUTOMATION");
+            redrawDialWheel(dial, TFTscreen);
             updateDialWheel(dial, dialValue, TFTscreen);
             drawChar(TFTscreen, automate ? 'Y' : 'N');
             break;
+          case Settings::Clock:
+            drawTitleSubtitle(TFTscreen, "SETTINGS", "CLOCK");
+            drawHours(TFTscreen, newHours, 0, 20, !changingMinutes ? 0x37E6 : 0xFFFF);
+            drawClockSeparator(TFTscreen, 0, 20, 0xFFFF);
+            drawMinutes(TFTscreen, newMinutes, 0, 20, changingMinutes ? 0x37E6 : 0xFFFF);
+            break;
         }
-        redrawDialWheel(dial, TFTscreen);
       }
       break;
   }

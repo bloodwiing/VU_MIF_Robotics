@@ -40,28 +40,48 @@ void drawChar(Adafruit_ST7735 &tft, char chr) {
   tft.print(chr);
 }
 
-void drawClock(Adafruit_ST7735 &tft, uint8_t hour, uint8_t minute, uint16_t ox, uint16_t oy) {
+void drawHours(Adafruit_ST7735 &tft, uint8_t hours, uint16_t ox, uint16_t oy, uint16_t color) {
   tft.setFont();
   tft.setTextSize(4);
-  tft.setTextColor(0xFFFF, 0);
+  tft.setTextColor(color, 0);
   
   tft.setCursor(25+ox, 50+oy);
-  if (hour < 10) {
+  if (hours < 10) {
     tft.print(0);
   }
-  tft.print(hour);
-  
+  tft.print(hours);
+
+  tft.setTextSize(1);
+}
+
+void drawClockSeparator(Adafruit_ST7735 &tft, uint16_t ox, uint16_t oy, uint16_t color) {
+  tft.setFont();
+  tft.setTextSize(4);
   tft.setCursor(70+ox, 50+oy);
-  tft.setTextColor(0xFFFF);
+  tft.setTextColor(color);
   tft.print(":");
-  tft.setTextColor(0xFFFF, 0);
+
+  tft.setTextSize(1);
+}
+
+void drawMinutes(Adafruit_ST7735 &tft, uint8_t minutes, uint16_t ox, uint16_t oy, uint16_t color) {
+  tft.setFont();
+  tft.setTextSize(4);
+  tft.setTextColor(color, 0);
   
   tft.setCursor(90+ox, 50+oy);
-  if (minute < 10) {
+  if (minutes < 10) {
     tft.print(0);
   }
-  tft.print(minute);
+  tft.print(minutes);
+
   tft.setTextSize(1);
+}
+
+void drawClock(Adafruit_ST7735 &tft, uint8_t hours, uint8_t minutes, uint16_t ox, uint16_t oy) {
+  drawHours(tft, hours, ox, oy, 0xFFFF);
+  drawClockSeparator(tft, ox, oy, 0xFFFF);
+  drawMinutes(tft, minutes, ox, oy, 0xFFFF);
 }
 
 template <size_t ROWS>

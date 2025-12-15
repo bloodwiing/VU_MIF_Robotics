@@ -136,7 +136,7 @@ short number = 0;
 bool can_count_down = false;
 
 short throbber_frame_number = 0;
-short throbber_frame_direction = 1;
+uint8_t throbber_frame_direction = 1;
 
 #define DOOR_POSITION_MAX 1023
 volatile int door_position = 0;
