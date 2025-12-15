@@ -11,6 +11,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7735.h>
 #include "dial.h"
+#include "door.h"
 #include "draw.h"
 #include "constants.h"
 
@@ -94,8 +95,6 @@ volatile bool timerEvent = false;
 int32_t dialValue = 0;
 
 uint32_t time = 0;
-uint32_t frame = 0;
-uint32_t lastFrame = 0;
 uint32_t lastButtonOKPress = 0;
 uint32_t lastButton1Press = 0;
 
@@ -271,6 +270,29 @@ void setup()
   validateEEPROM();
 }
 
+void updateOptionsMenuValues()
+{
+  // "BRIGHT", "TIMING", "SPEED", "CLOCK", "AUTO", "BACK", "RESET"
+  itoa(timeMode, settingTabValues[1], 10);
+  itoa(speedMode, settingTabValues[2], 10);
+
+  if (hours < 10) {
+    settingTabValues[3][0] = '0';
+    itoa(hours, settingTabValues[3]+1, 10);
+  } else {
+    itoa(hours, settingTabValues[3], 10);
+  }
+  settingTabValues[3][2] = ':';
+  if (minutes < 10) {
+    settingTabValues[3][3] = '0';
+    itoa(minutes, settingTabValues[3]+4, 10);
+  } else {
+    itoa(minutes, settingTabValues[3]+3, 10);
+  }
+
+  strncpy(settingTabValues[4], automate ? "YES" : "NO", sizeof(settingTabValues[4]));
+}
+
 void loop()
 {
   analogWrite(BRIGHTNESS_PIN, 125);
@@ -278,7 +300,6 @@ void loop()
   {
     timerEvent = false;
     time++;
-    frame++;
 
     int sensor_val = analogRead(SENSOR_PIN);
     if (automate && sensor_val >= SENSOR_REACT_THRESHOLD && operationState == OperationState::Closed)
@@ -353,6 +374,7 @@ void loop()
     {
       case State::Displaying:
         state = State::Settings;
+        updateOptionsMenuValues();
         settingsTab = 0;
         dialValue = 0;
         break;
@@ -416,6 +438,8 @@ void loop()
           }
         }
         state = State::Settings;
+        updateOptionsMenuValues();
+        dialValue = settingsTab;
         updateEEPROMIfChanged();
         break;
     }
@@ -462,10 +486,9 @@ void loop()
             }
             if (timeMode != dialValue) {
               timeMode = dialValue;
-              frame = 0;
             }
             updateDialWheel(dial, dialValue, TFTscreen);
-            drawDigit(TFTscreen, dialValue, frame);
+            drawDigit(TFTscreen, dialValue);
             tickTimeMs = timeModes[timeMode];
             break;
           
@@ -477,10 +500,9 @@ void loop()
             }
             if (speedMode != dialValue) {
               speedMode = dialValue;
-              frame = 0;
             }
             updateDialWheel(dial, dialValue, TFTscreen);
-            drawDigit(TFTscreen, dialValue, frame);
+            drawDigit(TFTscreen, dialValue);
             speedIncrement = speedModes[speedMode];
             break;
           
@@ -566,13 +588,13 @@ void loop()
             drawTitleSubtitle(TFTscreen, "SETTINGS", "TIMING");
             redrawDialWheel(dial, TFTscreen);
             updateDialWheel(dial, dialValue, TFTscreen);
-            drawDigit(TFTscreen, dialValue, frame);
+            drawDigit(TFTscreen, dialValue);
             break;
           case Settings::Speed:
             drawTitleSubtitle(TFTscreen, "SETTINGS", "SPEED");
             redrawDialWheel(dial, TFTscreen);
             updateDialWheel(dial, dialValue, TFTscreen);
-            drawDigit(TFTscreen, dialValue, frame);
+            drawDigit(TFTscreen, dialValue);
             break;
           case Settings::Automation:
             drawTitleSubtitle(TFTscreen, "SETTINGS", "AUTOMATION");
@@ -587,22 +609,6 @@ void loop()
             drawMinutes(TFTscreen, newMinutes, 0, 20, changingMinutes ? 0x37E6 : 0xFFFF);
             break;
         }
-      }
-      if (frame < ANIMATION_FRAMES && lastFrame != frame)
-      {
-        lastFrame = frame;
-        switch (settingTabEnums[settingsTab])
-          {
-            case Settings::Time:
-              drawDigit(TFTscreen, dialValue, frame);
-              break;
-            case Settings::Speed:
-              drawDigit(TFTscreen, dialValue, frame);
-              break;
-            case Settings::Automation:
-              drawChar(TFTscreen, automate ? 'Y' : 'N');
-              break;
-          }
       }
       break;
   }

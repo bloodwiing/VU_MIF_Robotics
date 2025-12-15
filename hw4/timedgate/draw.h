@@ -2,14 +2,11 @@
 #include <string.h>
 #include <stddef.h>
 #include <stdint.h>
-// #include <Fonts/FreeSansBold18pt7b.h>
 #include <Fonts/FreeSansBold9pt7b.h>
 #include <Adafruit_GFX.h>
-#include "math.h"
 #include "constants.h"
 
 GFXcanvas1 charBuf(30, 40);  // digit or char
-GFXcanvas1 optionsBuf(160, 128);  // options menu
 
 void drawTitleSubtitle(Adafruit_ST7735 &tft, const char* title, const char* subtitle) {
   tft.setFont();
@@ -30,32 +27,24 @@ void drawTitle(Adafruit_ST7735 &tft, const char* title) {
   tft.print(title);
 }
 
-void drawDigit(Adafruit_ST7735 &tft, uint8_t digit, uint32_t frame) {
-  // tft.setFont(&FreeSansBold18pt7b);
-  // tft.fillRect(65, 65, 30, 40, 0);
-  // tft.setTextColor(0xFFFF);
-  // tft.setCursor(70, 95);
-  // tft.print(digit);
-  uint16_t moveY = (uint16_t)(easeIncrementSnappy(frame, ANIMATION_FRAMES, ANIMATION_SNAPPINESS) * 40);
-  Serial.println(moveY);
-  uint16_t topY = 40 - (uint16_t)(easeInOutPow((float)frame / (float)(ANIMATION_FRAMES), ANIMATION_SNAPPINESS) * 40);
-  // charBuf.fillScreen(0);
+void drawDigit(Adafruit_ST7735 &tft, uint8_t digit) {
+  charBuf.fillScreen(0);
   charBuf.setFont(&FreeSansBold9pt7b);
   charBuf.setTextSize(2);
-  // charBuf.drawBitmap(0, moveY, charBuf.getBuffer(), 30, 40-moveY, 1, 0);
-  charBuf.fillRect(0, 0, 30, 0, 0);
-  charBuf.setCursor(5, 30-topY);
+  charBuf.setCursor(5, 30);
   charBuf.setTextColor(1);
   charBuf.print(digit);
   tft.drawBitmap(65, 65, charBuf.getBuffer(), 30, 40, 0xFFFF, 0);
 }
 
 void drawChar(Adafruit_ST7735 &tft, char chr) {
-  // tft.setFont(&FreeSansBold18pt7b);
-  tft.fillRect(65, 65, 30, 40, 0);
-  tft.setTextColor(0xFFFF);
-  tft.setCursor(68, 95);
-  tft.print(chr);
+  charBuf.fillScreen(0);
+  charBuf.setFont(&FreeSansBold9pt7b);
+  charBuf.setTextSize(2);
+  charBuf.setCursor(5, 30);
+  charBuf.setTextColor(1);
+  charBuf.print(chr);
+  tft.drawBitmap(62, 65, charBuf.getBuffer(), 30, 40, 0xFFFF, 0);
 }
 
 void drawHours(Adafruit_ST7735 &tft, uint8_t hours, uint16_t ox, uint16_t oy, uint16_t color) {
@@ -120,9 +109,10 @@ void drawOptionsMenu(Adafruit_ST7735 &tft, const char* const* options, const cha
     tft.setCursor(x, y);
     tft.print(options[min]);
 
-    size_t len = strlen(values[min]);
+    uint16_t valueULX, valueULY, valueSizeX, valueSizeY;
+    tft.getTextBounds(values[min], 0, y, &valueULX, &valueULY, &valueSizeX, &valueSizeY);
 
-    tft.setCursor(150 - 10 * len, y);
+    tft.setCursor(150 - valueSizeX, y);
     tft.print(values[min]);
 
     y += 22;
