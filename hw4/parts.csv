@@ -1,0 +1,6 @@
+﻿Name,Quantity,Component
+"U1",1," Arduino Uno R3"
+"Rot1",1," EC11 Rotary Encoder"
+"Disp1",1,"1.8 TFT 128 x 160 Color Display"
+"APDS1",1,"APDS9960 Proximity, Light, RGB, and Gesture Sensor"
+"SERVO1",1,"Positional Micro Servo"
