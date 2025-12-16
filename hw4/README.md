@@ -54,11 +54,11 @@ __Note__: Clock is not reset as it is not kept in EEPROM to prevent constant wri
 
 ### Photo
 
-
+![photo](https://github.com/user-attachments/assets/e6c8a7ef-fc55-4771-950a-30cf3c22baf8)
 
 ### Video Demo
 
-
+[![The most complex project](https://markdown-videos-api.jorgenkh.no/url?url=https%3A%2F%2Fyoutu.be%2FFFcK6tFw0zo)](https://youtu.be/FFcK6tFw0zo)
 
 ### Review
 
