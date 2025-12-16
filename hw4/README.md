@@ -16,7 +16,7 @@ A turn left or right changes either the **Setting State** or active value.
 There are 3 state machines:
 
 Main state:
-- **Display**: The counter is visible and shown
+- **Display**: A live clock is shown
 - **Settings**: The 7 item settings menu to operate the device
 - **ChangingValue**: Used in Brightness, Timing, Speed, Clock and Automate settings pages when the value is actively being edited
 
@@ -31,8 +31,8 @@ Setting state:
   Press "OK" again to apply
 - **Automate**: If pressed "OK", it will allow the user to choose between clock-based automation ("YES") or manual proximity-based detection ("NO").
   Press "OK" again to apply
-- **Back**: If pressed "OK", it will cause Brightness, Timing, Speed, Clock and Automate settings to reset to defaults.
-- **Reset**: If pressed "OK", it will go back to viewing the clock
+- **Back**: If pressed "OK", it will go back to viewing the clock
+- **Reset**: If pressed "OK", it will cause Brightness, Timing, Speed, Clock and Automate settings to reset to defaults.
 
 Door state:
 - **Closed**: The door is currently closed
