@@ -58,11 +58,11 @@ Pushing it down opens the door, it stays open until the user lets go and enough 
 
 ### Photo
 
-
+<img width="1044" height="466" alt="photo" src="https://github.com/user-attachments/assets/1f37eb37-30e9-4e30-8193-0ce59f84b947" />
 
 ### Video Demo
 
-
+https://github.com/user-attachments/assets/6dfb61c9-25f5-4faf-8c82-16b926f0c615
 
 ### Review
 
