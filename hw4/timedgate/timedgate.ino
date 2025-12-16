@@ -14,6 +14,7 @@
 #include "door.h"
 #include "draw.h"
 #include "constants.h"
+#include <Arduino_APDS9960.h>
 
 uint8_t CRC8(const uint8_t *data, int length);
 
@@ -29,11 +30,10 @@ const int BUTTON_2   = 4;
 const int BUTTON_1   = 3;
 const int BRIGHTNESS_PIN = 6;
 const int SERVO_PIN  = 5;
-const int SENSOR_PIN = A0;
 
 const int DEBOUNCE_TIME_MS = 20;
 const int DEBOUNCE_SWITCH_TIME_MS = 60;
-const int SENSOR_REACT_THRESHOLD = 400;
+const int SENSOR_REACT_THRESHOLD = 50;
 
 enum class State : uint8_t
 {
@@ -75,11 +75,15 @@ struct UserData
 {
   byte magic;
   byte version;
+  short brightnessMode;
   short timeMode;
   bool automaticMode;
-  bool speedMode;
+  short speedMode;
   uint8_t crc;
 };
+
+#define BRIGTHNESS_MODES_MAX 7
+const byte brightnessModes[] = {1, 10, 20, 45, 80, 140, 255};
 
 #define TIME_MODES_MAX 9
 const uint32_t timeModes[] = {20, 50, 100, 250, 500, 750, 1000, 5000, 60000};
@@ -98,11 +102,13 @@ uint32_t time = 0;
 uint32_t lastButtonOKPress = 0;
 uint32_t lastButton1Press = 0;
 
+short brightnessMode = 4;
+uint32_t brightnessValue = 80;
 short timeMode = 4;
 uint32_t tickTimeMs = 500;
 short speedMode = 4;
 uint32_t speedIncrement = 10;
-bool automate = true;
+bool automate = false;
 
 uint32_t lastTick = 0;
 bool dotTicked = false;
@@ -120,6 +126,7 @@ UserData data;
 Adafruit_ST7735 TFTscreen = Adafruit_ST7735(LCD_CS, LCD_DC, LCD_RST);
 
 DialConfig* dial = createDialWheel(43, 47, 0x5ACB, 0x37E6, 0, 100);
+DoorConfig* door = createDoor(30, 40, 0x5ACB, 0x37E6, 0, DOOR_POSITION_MAX);
 
 uint16_t hours = 12;
 uint16_t minutes = 0;
@@ -172,10 +179,12 @@ ISR(TIMER2_COMPA_vect)
 
 void resetSettings()
 {
+  brightnessMode = 4;
   timeMode = 4;
   speedMode = 3;
-  automate = true;
+  automate = false;
 
+  brightnessValue = brightnessModes[brightnessMode];
   tickTimeMs = timeModes[timeMode];
   speedIncrement = speedModes[speedMode];
 }
@@ -203,10 +212,12 @@ void validateEEPROM()
 
   Serial.println("EEPROM validated");
 
+  brightnessMode = data.brightnessMode;
   timeMode = data.timeMode;
   speedMode = data.speedMode;
   automate = data.automaticMode;
 
+  brightnessValue = brightnessModes[brightnessMode];
   tickTimeMs = timeModes[timeMode];
   speedIncrement = speedModes[speedMode];
 }
@@ -216,6 +227,7 @@ void updateEEPROM()
   data = {};
   data.magic = USER_DATA_MAGIC;
   data.version = USER_DATA_VERSION;
+  data.brightnessMode = brightnessMode;
   data.timeMode = timeMode;
   data.speedMode = speedMode;
   data.automaticMode = automate;
@@ -268,11 +280,27 @@ void setup()
   doorServo.attach(SERVO_PIN);
 
   validateEEPROM();
+
+  if (!APDS.begin()) {
+    Serial.println("Error initializing APDS-9960 sensor!");
+  }
+
+  if (automate) {
+    if (hours >= 8 && hours <= 18 && operationState == OperationState::Closed) {
+      operationState = OperationState::Opening;
+      screenNeedsRefresh = true;
+    }
+    else if (!(hours >= 8 && hours <= 18) && operationState == OperationState::Open) {
+      operationState = OperationState::Closing;
+      screenNeedsRefresh = true;
+    }
+  }
 }
 
 void updateOptionsMenuValues()
 {
   // "BRIGHT", "TIMING", "SPEED", "CLOCK", "AUTO", "BACK", "RESET"
+  itoa(brightnessMode, settingTabValues[0], 10);
   itoa(timeMode, settingTabValues[1], 10);
   itoa(speedMode, settingTabValues[2], 10);
 
@@ -301,10 +329,13 @@ void loop()
     timerEvent = false;
     time++;
 
-    int sensor_val = analogRead(SENSOR_PIN);
-    if (automate && sensor_val >= SENSOR_REACT_THRESHOLD && operationState == OperationState::Closed)
-    {
-      operationState = OperationState::Opening;
+    if (APDS.proximityAvailable()) {
+      int sensor_val = APDS.readProximity();
+      if (!automate && sensor_val <= SENSOR_REACT_THRESHOLD && operationState == OperationState::Closed)
+      {
+        operationState = OperationState::Opening;
+        screenNeedsRefresh = true;
+      }
     }
 
     if (operationState == OperationState::Opening)
@@ -314,6 +345,7 @@ void loop()
       {
         door_position = DOOR_POSITION_MAX;
         operationState = OperationState::Open;
+        screenNeedsRefresh = true;
         lastTick = time;
         number = 9;
       }
@@ -325,16 +357,14 @@ void loop()
       {
         door_position = 0;
         operationState = OperationState::Closed;
+        screenNeedsRefresh = true;
+        TFTscreen.fillScreen(0);
       }
     }
 
     if (automate)
     {
-      can_count_down = analogRead(SENSOR_PIN) < SENSOR_REACT_THRESHOLD;
-    }
-    else
-    {
-      can_count_down = digitalRead(BUTTON_2) == LOW;
+      can_count_down = !(hours >= 8 && hours <= 18);
     }
 
     if (!can_count_down)
@@ -350,6 +380,14 @@ void loop()
         minutes = 0;
         if (++hours >= 24) {
           hours = 0;
+        }
+        if (hours == 8 && operationState == OperationState::Closed) {
+          operationState = OperationState::Opening;
+          screenNeedsRefresh = true;
+        }
+        else if (hours == 18 && operationState == OperationState::Open) {
+          operationState = OperationState::Closing;
+          screenNeedsRefresh = true;
         }
       }
     }
@@ -393,6 +431,12 @@ void loop()
             hours = 12;
             minutes = 0;
             state = State::Displaying;
+            break;
+          
+          case Settings::Brightness:
+            state = State::ChangingValue;
+            dialValue = brightnessMode;
+            dial->max = BRIGTHNESS_MODES_MAX-1;
             break;
           
           case Settings::Time:
@@ -478,6 +522,20 @@ void loop()
       case State::ChangingValue:
         switch (settingTabEnums[settingsTab])
         {
+          case Settings::Brightness:
+            if (dialValue >= BRIGTHNESS_MODES_MAX) {
+              dialValue = BRIGTHNESS_MODES_MAX-1;
+            } else if (dialValue < 0) {
+              dialValue = 0;
+            }
+            if (brightnessMode != dialValue) {
+              brightnessMode = dialValue;
+            }
+            updateDialWheel(dial, dialValue, TFTscreen);
+            drawDigit(TFTscreen, dialValue);
+            brightnessValue = brightnessModes[brightnessMode];
+            break;
+
           case Settings::Time:
             if (dialValue >= TIME_MODES_MAX) {
               dialValue = TIME_MODES_MAX-1;
@@ -515,6 +573,16 @@ void loop()
             updateDialWheel(dial, dialValue, TFTscreen);
             automate = dialValue == 1;
             drawChar(TFTscreen, automate ? 'Y' : 'N');
+            if (automate) {
+              if (hours >= 8 && hours <= 18 && operationState == OperationState::Closed) {
+                operationState = OperationState::Opening;
+                screenNeedsRefresh = true;
+              }
+              else if (!(hours >= 8 && hours <= 18) && operationState == OperationState::Open) {
+                operationState = OperationState::Closing;
+                screenNeedsRefresh = true;
+              }
+            }
             break;
           
           case Settings::Clock:
@@ -537,6 +605,12 @@ void loop()
   if (time - lastTick >= tickTimeMs)
   {
     lastTick = time;
+
+    if (!automate && APDS.proximityAvailable()) {
+      int sensor_val = APDS.readProximity();
+      can_count_down = sensor_val > SENSOR_REACT_THRESHOLD;
+    }
+
     if (dotTicked)
     {
       if (can_count_down && --number == 0)
@@ -545,9 +619,11 @@ void loop()
         {
           case OperationState::Closed:
             operationState = OperationState::Opening;
+            screenNeedsRefresh = true;
             break;
           case OperationState::Open:
             operationState = OperationState::Closing;
+            screenNeedsRefresh = true;
             break;
         }
       }
@@ -561,8 +637,17 @@ void loop()
 
     case State::Displaying:
       if (screenNeedsRefresh) {
+        Serial.println(F("REFRESHING CLOCK"));
         screenNeedsRefresh = false;
-        drawClock(TFTscreen, hours, minutes, 0, 0);
+        switch (operationState) {
+          case OperationState::Opening:
+          case OperationState::Closing:
+            redrawDoor(door, TFTscreen);
+            updateDoor(door, door_position, TFTscreen);
+            break;
+          case OperationState::Closed:
+            drawClock(TFTscreen, hours, minutes, 0, 0);
+        }
       }
       break;
 
@@ -584,6 +669,12 @@ void loop()
         screenNeedsRefresh = false;
         switch (settingTabEnums[settingsTab])
         {
+          case Settings::Brightness:
+            drawTitleSubtitle(TFTscreen, "SETTINGS", "BRIGHTNESS");
+            redrawDialWheel(dial, TFTscreen);
+            updateDialWheel(dial, dialValue, TFTscreen);
+            drawDigit(TFTscreen, dialValue);
+            break;
           case Settings::Time:
             drawTitleSubtitle(TFTscreen, "SETTINGS", "TIMING");
             redrawDialWheel(dial, TFTscreen);
@@ -612,6 +703,8 @@ void loop()
       }
       break;
   }
+
+  analogWrite(BRIGHTNESS_PIN, brightnessValue);
 
   int servo_pos = map(door_position, 0, DOOR_POSITION_MAX, 750, 2250);
   doorServo.write(servo_pos);
