@@ -210,7 +210,7 @@ void validateEEPROM()
     return;
   }
 
-  Serial.println("EEPROM validated");
+  Serial.println(F("EEPROM validated"));
 
   brightnessMode = data.brightnessMode;
   timeMode = data.timeMode;
@@ -282,7 +282,7 @@ void setup()
   validateEEPROM();
 
   if (!APDS.begin()) {
-    Serial.println("Error initializing APDS-9960 sensor!");
+    Serial.println(F("Error initializing APDS-9960 sensor!"));
   }
 
   if (automate) {
@@ -358,7 +358,6 @@ void loop()
         door_position = 0;
         operationState = OperationState::Closed;
         screenNeedsRefresh = true;
-        TFTscreen.fillScreen(0);
       }
     }
 
@@ -637,17 +636,8 @@ void loop()
 
     case State::Displaying:
       if (screenNeedsRefresh) {
-        Serial.println(F("REFRESHING CLOCK"));
         screenNeedsRefresh = false;
-        switch (operationState) {
-          case OperationState::Opening:
-          case OperationState::Closing:
-            redrawDoor(door, TFTscreen);
-            updateDoor(door, door_position, TFTscreen);
-            break;
-          case OperationState::Closed:
-            drawClock(TFTscreen, hours, minutes, 0, 0);
-        }
+        drawClock(TFTscreen, hours, minutes, 0, 0);
       }
       break;
 
